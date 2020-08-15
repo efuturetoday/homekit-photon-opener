@@ -26,7 +26,7 @@ export abstract class AbstractAccessory implements AccessoryPlugin {
 
     abstract getServices(): Service[];
 
-    updateServiceByParticleVariable(characteristic: Characteristic, name: string, transform: (data: any) => CharacteristicValue) {
+    updateCharacteristicByParticleVariable(characteristic: Characteristic, name: string, transform: (data: any) => CharacteristicValue, callback?: (value: CharacteristicValue) => void) {
         return this.particle.getVariable({
             deviceId: this.config.deviceId,
             name: name,
@@ -38,39 +38,40 @@ export abstract class AbstractAccessory implements AccessoryPlugin {
 
             characteristic.updateValue(value);
 
+            if (callback) {
+                callback(value);
+            }
+
             return value;
         }, (err: any) => {
             this.log.error(`An error occurred while getting Device variable ${name}`, err);
         });
     }
 
-    bindParticleFunctionToCharacteristic(characteristic: Characteristic, name: string, getArgument: (value: CharacteristicValue) => string) {
-        return characteristic.on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-            const argument = getArgument(value);
+    callParticleFunction(name: string, argument: string, callback: CharacteristicSetCallback) {
+        this.particle.callFunction({
+            deviceId: this.config.deviceId,
+            name: name,
+            argument: argument,
+            auth: this.config.token
+        }).then((data: any) => {
+            this.log.debug(data);
+            const returnValue = data.body.return_value;
+            this.log.info(`Device Function "${name}" called succesfully with "${argument}":`, returnValue);
 
-            this.particle.callFunction({
-                deviceId: this.config.deviceId,
-                name: name,
-                argument: argument,
-                auth: this.config.token
-            }).then((data: any) => {
-                this.log.debug(data);
-                const returnValue = data.body.return_value;
-                this.log.info(`Device Function "${name}" called succesfully with "${argument}":`, returnValue);
-
-                if (returnValue >= 0) {
-                    callback();
-                } else {
-                    callback(new Error(returnValue));
-                }
-            }, (err: any) => {
-                callback(err);
-            });
+            if (returnValue >= 0) {
+                callback();
+            } else {
+                callback(new Error(returnValue));
+            }
+        }, (err: any) => {
+            callback(err);
         });
+
 
     }
 
-    bindParticleEventToCharacteristic(characteristic: Characteristic, name: string, transform: (data: any) => CharacteristicValue) {
+    bindParticleEventToCharacteristic(characteristic: Characteristic, name: string, transform: (data: any) => CharacteristicValue, callback?: (value: CharacteristicValue) => void) {
         this.particle.getEventStream({
             deviceId: this.config.deviceId,
             name: name,
@@ -81,6 +82,10 @@ export abstract class AbstractAccessory implements AccessoryPlugin {
                 const value = transform(data);
                 this.log.info(`Device Event "${name}" retrieved successfully: ${value}`);
                 characteristic.updateValue(value);
+
+                if (callback) {
+                    callback(value);
+                }
             });
         });
     }

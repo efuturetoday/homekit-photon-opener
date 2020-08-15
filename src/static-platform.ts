@@ -2,6 +2,7 @@ import {AccessoryPlugin, API, HAP, Logging, PlatformConfig, StaticPlatformPlugin
 import {MuteSwitch} from "./mute-accessory";
 import { RingToOpenSwitch } from "./rto-accessory";
 import { DoorOpenerSwitch } from "./door-opener-accesory";
+import { RingDetector } from "./ring-accessory";
 const Particle = require('particle-api-js');
 
 
@@ -65,6 +66,7 @@ class ExampleStaticPlatform implements StaticPlatformPlugin {
     callback([
       new DoorOpenerSwitch(hap, this.log, "Ring Open", particle, this.config),
       new MuteSwitch(hap, this.log, "Ring Mute", particle, this.config),
+      new RingDetector(hap, this.log, "Ring Detector", particle, this.config),
       new RingToOpenSwitch(hap, this.log, "Ring To Open", particle, this.config)
     ]);
   }
