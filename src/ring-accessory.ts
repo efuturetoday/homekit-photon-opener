@@ -11,36 +11,39 @@ import { AbstractAccessory } from './abstract-accessory';
 
 export class RingDetector extends AbstractAccessory {
 
-    private isRingActive: boolean = false
+    private motionDetected: boolean = false
 
     private readonly motionService: Service;
 
-    private timer:  NodeJS.Timeout | undefined ;
+    private timeout: NodeJS.Timer | undefined;
 
     constructor(hap: HAP, log: Logging, name: string, particle: any, config: any) {
         super(hap, log, name, particle, config);
 
         this.motionService = new hap.Service.MotionSensor(name);
-        const motionCharacteristic = this.motionService.getCharacteristic(hap.Characteristic.MotionDetected);
-        motionCharacteristic.on(CharacteristicEventTypes.GET, this.handleMotionDetectedGet.bind(this));
+        this.motionService.getCharacteristic(hap.Characteristic.MotionDetected)
+            .on(CharacteristicEventTypes.GET, this.handleSwitchGet.bind(this));
 
-        this.bindParticleEventToCharacteristic(motionCharacteristic, 'ring', _ => _.data === 'true', (value) => {
-            this.isRingActive = value as boolean;
-
-            if (this.timer) {
-                clearTimeout(this.timer);
-            }
-
-            this.timer = setTimeout(() => {
-                this.isRingActive = false;
-                motionCharacteristic.updateValue(this.isRingActive);
-            }, 3000);
-        });
+        this.bindParticleEvent('ring', this.handleParticleEvent.bind(this));
     }
 
-    handleMotionDetectedGet(callback: CharacteristicGetCallback) {
-        this.log.debug('Triggered GET MotionDetected');
-        callback(null, this.isRingActive);
+    handleSwitchGet(callback: CharacteristicGetCallback) {
+        this.log.debug('HOMEKIT GET: motionDetected', this.motionDetected)
+        callback(undefined, this.motionDetected);
+    }
+
+    handleParticleEvent(event: any) {
+        this.motionDetected = true;
+        this.motionService.setCharacteristic(this.hap.Characteristic.MotionDetected, this.motionDetected);
+
+        if (this.timeout) {
+            clearTimeout(this.timeout);
+        }
+
+        this.timeout = setTimeout(() => {
+            this.motionDetected = false;
+            this.motionService.setCharacteristic(this.hap.Characteristic.MotionDetected, this.motionDetected);
+        }, 3000);
     }
 
     getServices(): Service[] {

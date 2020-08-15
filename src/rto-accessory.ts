@@ -1,42 +1,70 @@
 import {
-  CharacteristicGetCallback,
-  HAP,
-  Logging,
-  Service,
-  CharacteristicEventTypes,
-  CharacteristicSetCallback,
-  CharacteristicValue
+    CharacteristicGetCallback,
+    HAP,
+    Logging,
+    Service,
+    CharacteristicEventTypes,
+    CharacteristicSetCallback,
+    CharacteristicValue
 } from 'homebridge';
 import { AbstractAccessory } from './abstract-accessory';
 
 export class RingToOpenSwitch extends AbstractAccessory {
-  
-  private isRTOActive: boolean = false
 
-  private readonly switchService: Service;
+    private isRTOActive: boolean = false
 
-  constructor(hap: HAP, log: Logging, name: string, particle: any, config: any) {
-    super(hap, log, name, particle, config);
+    private readonly switchService: Service;
 
-    this.switchService = new hap.Service.Switch(name);
-    const onCharacteristic = this.switchService.getCharacteristic(hap.Characteristic.On);
-    onCharacteristic
-      .on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-        this.log('HOMEKIT GET: isRTOActive', this.isRTOActive)
+    constructor(hap: HAP, log: Logging, name: string, particle: any, config: any) {
+        super(hap, log, name, particle, config);
+
+        this.switchService = new hap.Service.Switch(name);
+        this.switchService.getCharacteristic(hap.Characteristic.On)
+            .on(CharacteristicEventTypes.GET, this.handleSwitchGet.bind(this))
+            .on(CharacteristicEventTypes.SET, this.handleSwitchSet.bind(this));
+
+        this.bindParticleEvent('rto', this.handleParticleEvent.bind(this));
+        this.pollParticleVariable();
+    }
+
+
+    handleSwitchGet(callback: CharacteristicGetCallback) {
+        this.log.debug('HOMEKIT GET: isRTOActive', this.isRTOActive)
         callback(undefined, this.isRTOActive);
-      })
-      .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+    }
+
+    handleSwitchSet(value: CharacteristicValue, callback: CharacteristicSetCallback) {
+        this.log.debug('HOMEKIT SET: isRTOActive', value);
+
         this.isRTOActive = value as boolean;
-        this.log('HOMEKIT SET: isRTOActive', this.isRTOActive)
-        this.callParticleFunction('setRTO', this.isRTOActive ? 'true': 'false', callback);
-      });
+        this.callParticleFunction('setRTO', this.isRTOActive.toString())
+            .then(() => {
+                callback(undefined, this.isRTOActive);
+            })
+            .catch((err) => {
+                callback(err);
+            });
+    }
 
-    this.updateCharacteristicByParticleVariable(onCharacteristic, 'isRTOActive', _ => _.body.result, _ => this.isRTOActive = _ as boolean);
-  }
+    handleParticleEvent(event: any) {
+        this.isRTOActive = event.data === 'true';
+        this.switchService.updateCharacteristic(this.hap.Characteristic.On, this.isRTOActive);
+    }
 
-  getServices(): Service[] {
-    return [
-      this.informationService,
-      this.switchService
-    ];
-  }
+    pollParticleVariable() {
+        this.getParticleVariable('isRTOActive')
+            .then((response: any) => {
+                this.isRTOActive = response.body.result;
+                this.switchService.updateCharacteristic(this.hap.Characteristic.On, this.isRTOActive);
+            }).catch((err) => {
+                this.log.error(err);
+            });
+    }
+
+    getServices(): Service[] {
+        return [
+            this.informationService,
+            this.switchService
+        ];
+    }
+}
